@@ -2,7 +2,7 @@ Simple voice bot using Ollama and tinyllama
 
 To run this firstly  install ollama locally from the link https://ollama.com/download/windows
 
-on cmd run ollama pull tiny llama 
+on cmd run ollama pull tinyllama 
 
 run the requirements.txt file to install the requirements 
 
