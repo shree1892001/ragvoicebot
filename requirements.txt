@@ -4,3 +4,7 @@ fastapi
 uvicorn
 sentence-transformers
 pyaudio
+faiss-cpu
+pyttsx3
+SpeechRecognition
+nltk
