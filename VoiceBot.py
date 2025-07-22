@@ -1,9 +1,9 @@
+
 import os
 import pickle
 import time
 import logging
 import asyncio
-from Constants  import *
 from typing import Optional, Tuple, List
 from langchain_community.llms import Ollama
 from langchain_community.vectorstores.faiss import FAISS
@@ -14,9 +14,7 @@ from langchain.schema import Document
 from langchain.prompts import PromptTemplate
 import concurrent.futures
 from functools import lru_cache
-
 from voice_utils import audio_to_text, text_to_audio
-
 logging.basicConfig(level=logging.ERROR)
 
 
@@ -43,7 +41,7 @@ class OptimizedRAG:
         """Setup storage paths"""
         self.persist_dir = "./storage_fast"
         self.vectorstore_path = os.path.join(self.persist_dir, "vectorstore.pkl")
-        self.data_file = DIR
+        self.data_file = "redberyl_tech_all_data.txt"
         os.makedirs(self.persist_dir, exist_ok=True)
 
     def setup_llm(self):
@@ -94,7 +92,7 @@ class OptimizedRAG:
                 model_kwargs={'device': 'cpu'},  # Use CPU for compatibility
                 encode_kwargs={
                     'normalize_embeddings': True,
-                    'batch_size': 20,  # Smaller batch for faster processing
+                    'batch_size': 16,  # Smaller batch for faster processing
 
                 }
             )
@@ -143,8 +141,8 @@ class OptimizedRAG:
 
             # Optimized text splitter for better chunks
             text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=300,  # Smaller chunks for faster processing
-                chunk_overlap=30,  # Reduced overlap
+                chunk_size=1000,  # Larger chunks to keep lists together
+                chunk_overlap=100,  # More overlap to avoid splitting lists
                 length_function=len,
                 separators=["\n\n", "\n", ". ", "! ", "? ", " ", ""]
             )
@@ -184,17 +182,17 @@ class OptimizedRAG:
             self.retriever = self.vectorstore.as_retriever(
                 search_type="similarity",
                 search_kwargs={
-                    "k": 4,  # Reduce from 3 to 2 for speed
-                    "fetch_k": 8 # Reduce from 6 to 4
+                    "k": 4,  # Increase to 4 for more context
+                    "fetch_k": 8  # Increase to 8
                 }
             )
 
-            # Minimal prompt for faster processing
+            # Improved prompt for better list extraction
             prompt_template = """Context: {context}
 
 Question: {question}
 
-Answer briefly:"""
+If the question asks for a list or products, extract and provide the full list from the context. Otherwise, answer briefly."""
 
             prompt = PromptTemplate(
                 template=prompt_template,
@@ -294,7 +292,7 @@ Answer briefly:"""
 
 def main():
     """Main chat loop with optimizations"""
-    print("🚀 Ultra-Fast RAG Voice Bot")
+    print("🚀 Ultra-Fast RAG Chatbot")
     print("=" * 60)
 
     try:
@@ -304,34 +302,31 @@ def main():
         rag.warm_up()
 
         print("\n💬 Ready! Ask about RedBeryl Technologies")
-        print("💡 Say 'exit' to quit")
-        print("💡 Say 'clear' to clear cache")
+        print("💡 Type 'exit' to quit")
+        print("💡 Type 'clear' to clear cache")
         print("💡 Common questions are cached for instant responses\n")
 
         while True:
             try:
-                print("❓ Listening for your question...")
-                question = audio_to_text()
-
-                if not question:
-                    print("❌ No speech detected or unable to understand. Please try again.")
-                    continue
+                question =  audio_to_text()
 
                 if question.lower() in ['exit', 'quit', 'q']:
                     print("👋 Goodbye!")
-                    text_to_audio("Goodbye!")
                     break
 
                 if question.lower() == 'clear':
                     rag._cached_query.cache_clear()
                     print("🗑️ Cache cleared")
-                    text_to_audio("Cache cleared.")
+                    continue
+
+                if not question:
                     continue
 
                 answer, response_time = rag.query(question)
 
                 print(f"\n🤖 Answer: {answer}")
                 text_to_audio(answer)
+
                 print(f"⏱️  Time: {response_time} ms")
 
                 # Speed indicator
@@ -352,11 +347,9 @@ def main():
                 break
             except Exception as e:
                 print(f"❌ Error: {e}")
-                text_to_audio(f"An error occurred: {str(e)}")
 
     except Exception as e:
         print(f"❌ Failed to start: {e}")
-        text_to_audio(f"Failed to start the voice bot: {str(e)}")
         print("\n💡 Troubleshooting tips:")
         print("1. Ensure Ollama is running: ollama serve")
         print("2. Check if tinyllama is installed: ollama pull tinyllama")
@@ -364,4 +357,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 

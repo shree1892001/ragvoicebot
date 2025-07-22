@@ -91,7 +91,7 @@ class OptimizedRAG:
                 model_kwargs={'device': 'cpu'},  # Use CPU for compatibility
                 encode_kwargs={
                     'normalize_embeddings': True,
-                    'batch_size': 10,  # Smaller batch for faster processing
+                    'batch_size': 16,  # Smaller batch for faster processing
 
                 }
             )
