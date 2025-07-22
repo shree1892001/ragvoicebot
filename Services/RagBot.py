@@ -2,8 +2,7 @@ import os
 import pickle
 import time
 import logging
-import asyncio
-from typing import Optional, Tuple, List
+from typing import Tuple
 from langchain_community.llms import Ollama
 from langchain_community.vectorstores.faiss import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
@@ -13,7 +12,7 @@ from langchain.schema import Document
 from langchain.prompts import PromptTemplate
 import concurrent.futures
 from functools import lru_cache
-from Constants  import *
+from Common.Constants import *
 logging.basicConfig(level=logging.ERROR)
 
 

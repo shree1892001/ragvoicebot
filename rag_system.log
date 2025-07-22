@@ -1,0 +1,17 @@
+2025-07-22 14:20:46,664 - INFO - Chatbot session started.
+2025-07-22 14:20:46,665 - INFO - Initializing OptimizedRAG instance.
+2025-07-22 14:20:46,666 - INFO - Attempting to connect to Ollama...
+2025-07-22 14:20:46,749 - INFO - Ollama connection successful.
+2025-07-22 14:20:46,753 - INFO - LLM setup complete.
+2025-07-22 14:20:46,755 - INFO - Setting up HuggingFace embeddings...
+2025-07-22 14:21:13,052 - INFO - Embeddings setup successful.
+2025-07-22 14:21:13,053 - INFO - Loading vectorstore from disk...
+2025-07-22 14:21:13,610 - INFO - Vectorstore loaded.
+2025-07-22 14:21:13,610 - INFO - Setting up QA chain...
+2025-07-22 14:21:13,611 - INFO - QA chain setup successful.
+2025-07-22 14:21:13,612 - INFO - OptimizedRAG setup complete.
+2025-07-22 14:21:13,612 - INFO - System warm-up started.
+2025-07-22 14:21:13,612 - INFO - Received query: What is RedBeryl?
+2025-07-22 14:21:13,612 - DEBUG - Running query: What is RedBeryl?
+2025-07-22 14:22:02,887 - INFO - Used cached result. Time: 49274 ms
+2025-07-22 14:22:02,887 - INFO - System warm-up completed.

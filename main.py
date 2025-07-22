@@ -187,11 +187,7 @@ class OptimizedRAG:
             )
 
             # Improved prompt for better list extraction
-            prompt_template = """Context: {context}
-
-Question: {question}
-
-If the question asks for a list or products, extract and provide the full list from the context. Otherwise, answer briefly."""
+            prompt_template = P
 
             prompt = PromptTemplate(
                 template=prompt_template,
