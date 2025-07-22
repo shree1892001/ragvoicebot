@@ -303,7 +303,17 @@ def main():
 
         while True:
             try:
-                question = audio_to_text()
+                try:
+                    question = audio_to_text()
+                except Exception as e:
+                    print(f"❌ Error during transcription: {e}")
+                    rag_logger.error(f"Transcription error: {e}")
+                    continue
+
+                if not question:
+                    print("⚠️ No input detected. Please try again.")
+                    rag_logger.warning("No input detected from user.")
+                    continue
 
                 if question.lower() in ['exit', 'quit', 'q']:
                     print("👋 Goodbye!")
@@ -316,10 +326,13 @@ def main():
                     rag_logger.info("Cache cleared by user.")
                     continue
 
-                if not question:
-                    continue
-
-                answer, response_time = rag.query(question)
+                try:
+                    answer, response_time = rag.query(question)
+                except Exception as e:
+                    print(f"❌ Error during answer retrieval: {e}")
+                    rag_logger.error(f"Answer retrieval error: {e}")
+                    answer = INSUFFICIENT_ANSWER_RESPONSE
+                    response_time = 0
 
                 # Custom handling for insufficient answers
                 def is_price_question(q):
@@ -345,11 +358,17 @@ def main():
 
                 if is_price_question(question):
                     answer = PRICE_INQUIRY_RESPONSE
+                    rag_logger.info("Price inquiry detected. Responded with contact info.")
                 elif is_insufficient_answer(answer):
                     answer = INSUFFICIENT_ANSWER_RESPONSE
+                    rag_logger.info("Insufficient answer detected. Responded with apology.")
 
                 print(f"\n🤖 Answer: {answer}")
-                text_to_audio(answer)
+                try:
+                    text_to_audio(answer)
+                except Exception as e:
+                    print(f"❌ Error during text-to-speech: {e}")
+                    rag_logger.error(f"TTS error: {e}")
 
                 print(f"⏱️  Time: {response_time} ms")
                 if response_time < 1000:
