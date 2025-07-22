@@ -1,0 +1,10 @@
+langchain
+langchain-community
+fastapi
+uvicorn
+sentence-transformers
+pyaudio
+faiss-cpu
+pyttsx3
+SpeechRecognition
+nltk
