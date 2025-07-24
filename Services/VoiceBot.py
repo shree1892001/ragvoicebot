@@ -13,8 +13,9 @@ import os
 import pickle
 import time
 import logging
-import asyncio
-from typing import Optional, Tuple, List
+import concurrent.futures
+from functools import lru_cache
+from typing import Tuple
 from langchain_community.llms import Ollama
 from langchain_community.vectorstores.faiss import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
@@ -22,28 +23,21 @@ from langchain.chains import RetrievalQA
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
 from langchain.prompts import PromptTemplate
-import concurrent.futures
-from functools import lru_cache
 from Common.Constants import *
 from voice_utils import audio_to_text, text_to_audio
 
 # Setup logging
 rag_logger = logging.getLogger("RAGLogger")
 rag_logger.setLevel(logging.DEBUG)
-
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.INFO)
-
 file_handler = logging.FileHandler("../rag_system.log")
 file_handler.setLevel(logging.DEBUG)
-
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 console_handler.setFormatter(formatter)
 file_handler.setFormatter(formatter)
-
 rag_logger.addHandler(console_handler)
 rag_logger.addHandler(file_handler)
-
 
 class OptimizedRAG:
     _instance = None
@@ -78,7 +72,6 @@ class OptimizedRAG:
             rag_logger.info("Attempting to connect to Ollama...")
             import requests
             response = requests.get("http://127.0.0.1:11434/api/tags", timeout=3)
-
             if response.status_code == 200:
                 print("✅ Ollama connected")
                 rag_logger.info("Ollama connection successful.")
@@ -101,13 +94,6 @@ class OptimizedRAG:
             print(f"❌ LLM setup failed: {e}")
             rag_logger.exception("LLM setup failed")
 
-    def _has_gpu(self) -> bool:
-        try:
-            import torch
-            return torch.cuda.is_available()
-        except ImportError:
-            return False
-
     def setup_embeddings(self):
         try:
             print("🧮 Setting up ultra-fast embeddings...")
@@ -118,6 +104,7 @@ class OptimizedRAG:
                 encode_kwargs={
                     'normalize_embeddings': True,
                     'batch_size': 16,
+                    'show_progress_bar': False
                 }
             )
             print("✅ Ultra-fast embeddings ready")
@@ -156,38 +143,30 @@ class OptimizedRAG:
         try:
             if not os.path.exists(self.data_file):
                 raise FileNotFoundError(f"Data file {self.data_file} not found")
-
             with open(self.data_file, 'r', encoding='utf-8') as f:
                 raw_text = f.read()
-
             print(f"📄 Processing {len(raw_text)} characters...")
             rag_logger.info("Splitting text into chunks...")
-
             text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=1000,
-                chunk_overlap=100,
+                chunk_size=200,
+                chunk_overlap=20,
                 length_function=len,
                 separators=["\n\n", "\n", ". ", "! ", "? ", " ", ""]
             )
-
             texts = text_splitter.split_text(raw_text)
             print(f"📝 Created {len(texts)} optimized chunks")
-
             documents = [
                 Document(page_content=text.strip())
                 for text in texts
                 if text.strip() and len(text.strip()) > 20
             ]
-
             print("🗄️ Building optimized vectorstore...")
             self.vectorstore = FAISS.from_documents(documents, self.embeddings)
             print("✅ Optimized vectorstore created")
-
             with open(self.vectorstore_path, 'wb') as f:
                 pickle.dump(self.vectorstore, f)
             print("💾 Vectorstore saved for future use")
             rag_logger.info("Vectorstore created and saved.")
-
         except Exception as e:
             print(f"❌ Error creating vectorstore: {e}")
             rag_logger.exception("Failed to create vectorstore.")
@@ -197,17 +176,15 @@ class OptimizedRAG:
         try:
             print("⛓️ Setting up ultra-fast QA chain...")
             rag_logger.info("Setting up QA chain...")
-
             self.retriever = self.vectorstore.as_retriever(
                 search_type="similarity",
-                search_kwargs={"k": 4, "fetch_k": 8}
+                search_kwargs={"k": 2, "fetch_k": 4}
             )
-
+            prompt_template = """Context: {context}\n\nQuestion: {question}\n\nAnswer briefly:"""
             prompt = PromptTemplate(
-                template=PROMPT_TEMPLATE,
+                template=prompt_template,
                 input_variables=["context", "question"]
             )
-
             self.qa_chain = RetrievalQA.from_chain_type(
                 llm=self.llm,
                 chain_type="stuff",
@@ -231,8 +208,10 @@ class OptimizedRAG:
             rag_logger.debug(f"Running query: {question}")
             result = self.qa_chain.invoke({"query": question})
             if isinstance(result, dict):
-                return result.get('result', str(result)).strip()
-            return str(result).strip()
+                answer = result.get('result', str(result))
+            else:
+                answer = str(result)
+            return answer.strip()
         except Exception as e:
             rag_logger.exception("Query execution failed.")
             raise Exception(f"Query execution failed: {e}")
@@ -240,7 +219,6 @@ class OptimizedRAG:
     def query(self, question: str) -> Tuple[str, int]:
         start_time = time.perf_counter()
         rag_logger.info(f"Received query: {question}")
-
         try:
             try:
                 answer = self._cached_query(question)
@@ -252,22 +230,17 @@ class OptimizedRAG:
                     return answer, response_time
             except:
                 pass
-
             if not self.llm_available or not hasattr(self, 'qa_chain'):
                 raise Exception("LLM or QA chain not ready")
-
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(self._execute_query, question)
                 answer = future.result(timeout=30)
-
             if not answer or len(answer) < 5:
                 raise Exception("Empty response from LLM")
-
             end_time = time.perf_counter()
             response_time = int((end_time - start_time) * 1000)
             rag_logger.info(f"Query processed in {response_time} ms")
             return answer, response_time
-
         except Exception as e:
             end_time = time.perf_counter()
             response_time = int((end_time - start_time) * 1000)
@@ -286,21 +259,17 @@ class OptimizedRAG:
             print("⚠️ Warm up failed, but system should still work")
             rag_logger.warning("System warm-up failed.")
 
-
 def main():
     print("🚀 Ultra-Fast RAG Chatbot")
     print("=" * 60)
     rag_logger.info("Chatbot session started.")
-
     try:
         rag = OptimizedRAG()
         rag.warm_up()
-
         print("\n💬 Ready! Ask about RedBeryl Technologies")
         print("💡 Type 'exit' to quit")
         print("💡 Type 'clear' to clear cache")
         print("💡 Common questions are cached for instant responses\n")
-
         while True:
             try:
                 try:
@@ -309,23 +278,19 @@ def main():
                     print(f"❌ Error during transcription: {e}")
                     rag_logger.error(f"Transcription error: {e}")
                     continue
-
                 if not question:
                     print("⚠️ No input detected. Please try again.")
                     rag_logger.warning("No input detected from user.")
                     continue
-
                 if question.lower() in ['exit', 'quit', 'q']:
                     print("👋 Goodbye!")
                     rag_logger.info("User exited the session.")
                     break
-
                 if question.lower() == 'clear':
                     rag._cached_query.cache_clear()
                     print("🗑️ Cache cleared")
                     rag_logger.info("Cache cleared by user.")
                     continue
-
                 try:
                     answer, response_time = rag.query(question)
                 except Exception as e:
@@ -333,13 +298,10 @@ def main():
                     rag_logger.error(f"Answer retrieval error: {e}")
                     answer = INSUFFICIENT_ANSWER_RESPONSE
                     response_time = 0
-
-                # Custom handling for insufficient answers
                 def is_price_question(q):
                     keywords = ["price", "cost", "charge", "rate", "pricing", "how much", "fee"]
                     ql = q.lower()
                     return any(k in ql for k in keywords)
-
                 def is_insufficient_answer(ans):
                     if not ans or len(ans.strip()) < 10:
                         return True
@@ -355,21 +317,18 @@ def main():
                     ]
                     ansl = ans.lower()
                     return any(p in ansl for p in insufficient_phrases)
-
                 if is_price_question(question):
                     answer = PRICE_INQUIRY_RESPONSE
                     rag_logger.info("Price inquiry detected. Responded with contact info.")
                 elif is_insufficient_answer(answer):
                     answer = INSUFFICIENT_ANSWER_RESPONSE
                     rag_logger.info("Insufficient answer detected. Responded with apology.")
-
                 print(f"\n🤖 Answer: {answer}")
                 try:
                     text_to_audio(answer)
                 except Exception as e:
                     print(f"❌ Error during text-to-speech: {e}")
                     rag_logger.error(f"TTS error: {e}")
-
                 print(f"⏱️  Time: {response_time} ms")
                 if response_time < 1000:
                     print("⚡ Lightning fast!")
@@ -379,9 +338,7 @@ def main():
                     print("✅ Fast!")
                 else:
                     print("🐌 Slow - consider optimizing")
-
                 print("-" * 50)
-
             except KeyboardInterrupt:
                 print("\n👋 Goodbye!")
                 text_to_audio("Goodbye!")
@@ -390,14 +347,12 @@ def main():
             except Exception as e:
                 print(f"❌ Error: {e}")
                 rag_logger.exception("Unexpected error in main loop.")
-
     except Exception as e:
         print(f"❌ Failed to start: {e}")
         rag_logger.exception("Failed to initialize chatbot.")
         print("\n💡 Troubleshooting tips:")
         print("1. Ensure Ollama is running: ollama serve")
         print("2. Check if tinyllama is installed: ollama pull tinyllama")
-
 
 if __name__ == "__main__":
     main()

@@ -13,6 +13,7 @@ from langchain.prompts import PromptTemplate
 import concurrent.futures
 from functools import lru_cache
 from Common.Constants import *
+import re
 logging.basicConfig(level=logging.ERROR)
 
 
@@ -138,8 +139,8 @@ class OptimizedRAG:
             print(f"📄 Processing {len(raw_text)} characters...")
 
             text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=300,
-                chunk_overlap=30,
+                chunk_size=150,
+                chunk_overlap=50,
                 length_function=len,
                 separators=["\n\n", "\n", ". ", "! ", "? ", " ", ""]
             )
@@ -175,24 +176,19 @@ class OptimizedRAG:
         try:
             print("⛓️ Setting up ultra-fast QA chain...")
 
-            # Ultra-optimized retriever
             self.retriever = self.vectorstore.as_retriever(
                 search_type="similarity",
                 search_kwargs={
-                    "k": 4,  # Increase to 4 for more context
-                    "fetch_k": 8  # Increase to 8
+                    "k": 4,  # Increased for more context
+                    "fetch_k": 8 # Increased for more context
                 }
             )
 
-            # Improved prompt for better list extraction
-            prompt_template =PROMPT_TEMPLATE
-
+            prompt_template = PROMPT_TEMPLATE
             prompt = PromptTemplate(
                 template=prompt_template,
                 input_variables=["context", "question"]
             )
-
-            # Create optimized QA chain
             self.qa_chain = RetrievalQA.from_chain_type(
                 llm=self.llm,
                 chain_type="stuff",
@@ -213,7 +209,7 @@ class OptimizedRAG:
         return self._execute_query(question)
 
     def _execute_query(self, question: str) -> str:
-        """Execute the actual query"""
+        """Execute the actual query and post-process to return only the answer text"""
         try:
             result = self.qa_chain.invoke({"query": question})
 
@@ -222,9 +218,36 @@ class OptimizedRAG:
             else:
                 answer = str(result)
 
+            # Post-process: Remove context echo, question, and meta-commentary
+            answer = self._clean_answer(answer, question)
             return answer.strip()
         except Exception as e:
             raise Exception(f"Query execution failed: {e}")
+
+    def _clean_answer(self, answer: str, question: str) -> str:
+        """Remove context echo, question, and meta-commentary from the answer."""
+        lines = answer.splitlines()
+        filtered = []
+        for line in lines:
+            l = line.strip().lower()
+            if (
+                l.startswith("context:") or
+                l.startswith("question:") or
+                l.startswith("answer:") or
+                l.startswith("based on the provided context") or
+                l.startswith("as an ai") or
+                l.startswith("my task is") or
+                l.startswith("please provide") or
+                l.startswith("sure!") or
+                l == question.strip().lower() or
+                l == ""
+            ):
+                continue
+            filtered.append(line)
+        cleaned = "\n".join(filtered).strip()
+        # Remove repeated question if present
+        cleaned = re.sub(re.escape(question), '', cleaned, flags=re.IGNORECASE).strip()
+        return cleaned
 
     def query(self, question: str) -> Tuple[str, int]:
         """Ultra-fast query processing with optimizations"""

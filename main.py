@@ -23,18 +23,20 @@ class OptimizedRAG:
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             cls._instance = super(OptimizedRAG, cls).__new__(cls)
+            cls._instance._initialized = False
         return cls._instance
 
     def __init__(self):
-        if not hasattr(self, 'initialized'):
-            print("🚀 Initializing Ultra-Fast RAG...")
-            self.setup_paths()
-            self.setup_llm()
-            self.setup_embeddings()
-            self.load_or_create_vectorstore()
-            self.setup_qa_chain()
-            self.initialized = True
-            print("✅ Ultra-Fast RAG ready!")
+        if self._initialized:
+            return
+        print("🚀 Initializing Ultra-Fast RAG...")
+        self.setup_paths()
+        self.setup_llm()
+        self.setup_embeddings()
+        self.load_or_create_vectorstore()
+        self.setup_qa_chain()
+        self._initialized = True
+        print("✅ Ultra-Fast RAG ready!")
 
     def setup_paths(self):
         """Setup storage paths"""
@@ -92,7 +94,7 @@ class OptimizedRAG:
                 encode_kwargs={
                     'normalize_embeddings': True,
                     'batch_size': 16,  # Smaller batch for faster processing
-
+                    'show_progress_bar': False
                 }
             )
             print("✅ Ultra-fast embeddings ready")
@@ -140,8 +142,8 @@ class OptimizedRAG:
 
             # Optimized text splitter for better chunks
             text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=1000,  # Larger chunks to keep lists together
-                chunk_overlap=100,  # More overlap to avoid splitting lists
+                chunk_size=200,  # Smaller chunks for faster processing
+                chunk_overlap=20,  # Reduced overlap
                 length_function=len,
                 separators=["\n\n", "\n", ". ", "! ", "? ", " ", ""]
             )
@@ -181,13 +183,17 @@ class OptimizedRAG:
             self.retriever = self.vectorstore.as_retriever(
                 search_type="similarity",
                 search_kwargs={
-                    "k": 4,  # Increase to 4 for more context
-                    "fetch_k": 8  # Increase to 8
+                    "k": 2,  # Reduce from 3 to 2 for speed
+                    "fetch_k": 4  # Reduce from 6 to 4
                 }
             )
 
-            # Improved prompt for better list extraction
-            prompt_template = P
+            # Minimal prompt for faster processing
+            prompt_template = """Context: {context}
+
+Question: {question}
+
+Answer briefly:"""
 
             prompt = PromptTemplate(
                 template=prompt_template,
@@ -284,45 +290,40 @@ class OptimizedRAG:
         except:
             print("⚠️ Warm up failed, but system should still work")
 
+# Singleton accessor
+_rag_singleton = None
+def get_rag_singleton():
+    global _rag_singleton
+    if _rag_singleton is None:
+        _rag_singleton = OptimizedRAG()
+    return _rag_singleton
 
 def main():
     """Main chat loop with optimizations"""
     print("🚀 Ultra-Fast RAG Chatbot")
     print("=" * 60)
-
     try:
-        rag = OptimizedRAG()
-
-        # Warm up the system
+        rag = get_rag_singleton()
         rag.warm_up()
-
         print("\n💬 Ready! Ask about RedBeryl Technologies")
         print("💡 Type 'exit' to quit")
         print("💡 Type 'clear' to clear cache")
         print("💡 Common questions are cached for instant responses\n")
-
         while True:
             try:
                 question = input("❓ Question: ").strip()
-
                 if question.lower() in ['exit', 'quit', 'q']:
                     print("👋 Goodbye!")
                     break
-
                 if question.lower() == 'clear':
                     rag._cached_query.cache_clear()
                     print("🗑️ Cache cleared")
                     continue
-
                 if not question:
                     continue
-
                 answer, response_time = rag.query(question)
-
                 print(f"\n🤖 Answer: {answer}")
                 print(f"⏱️  Time: {response_time} ms")
-
-                # Speed indicator
                 if response_time < 1000:
                     print("⚡ Lightning fast!")
                 elif response_time < 3000:
@@ -331,23 +332,18 @@ def main():
                     print("✅ Fast!")
                 else:
                     print("🐌 Slow - consider optimizing")
-
                 print("-" * 50)
-
             except KeyboardInterrupt:
                 print("\n👋 Goodbye!")
                 break
             except Exception as e:
                 print(f"❌ Error: {e}")
-
     except Exception as e:
         print(f"❌ Failed to start: {e}")
         print("\n💡 Troubleshooting tips:")
         print("1. Ensure Ollama is running: ollama serve")
         print("2. Check if tinyllama is installed: ollama pull tinyllama")
 
-
 if __name__ == "__main__":
     main()
-
 
